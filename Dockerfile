@@ -1,10 +1,10 @@
 FROM node:24-bookworm-slim AS web-build
 
 WORKDIR /app
-RUN corepack enable
+RUN corepack enable && corepack prepare pnpm@10.18.0 --activate
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.json tsconfig.base.json ./
 COPY artifacts/uid-web ./artifacts/uid-web
-ENV CI=true PNPM_DANGEROUSLY_ALLOW_ALL_BUILDS=true PORT=5173 BASE_PATH=/
+ENV CI=true PORT=5173 BASE_PATH=/
 RUN pnpm install --no-frozen-lockfile
 RUN pnpm --filter @workspace/uid-web run build
 
