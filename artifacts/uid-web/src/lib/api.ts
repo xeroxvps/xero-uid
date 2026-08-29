@@ -47,7 +47,7 @@ export async function trackEvent(
     fetch("/api/admin/track", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action, entries, sessionId: getSessionId() }),
+      body: JSON.stringify({ action, count: entries.length, sessionId: getSessionId() }),
     }).catch(() => {});
   } catch {
     // silent — tracking never blocks main flow

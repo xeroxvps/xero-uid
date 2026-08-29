@@ -13,7 +13,16 @@ STATIC_DIR = os.environ.get(
     os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "uid-web", "dist", "public"),
 )
 app = Flask(__name__, static_folder=STATIC_DIR, static_url_path="")
-CORS(app)
+app.config['MAX_CONTENT_LENGTH'] = 256 * 1024
+ALLOWED_ORIGINS = [
+    origin.strip()
+    for origin in os.environ.get(
+        'ALLOWED_ORIGINS',
+        'https://uids.xirxsms.xyz,https://xerox-uid.onrender.com,http://localhost:5173',
+    ).split(',')
+    if origin.strip()
+]
+CORS(app, resources={r"/api/*": {"origins": ALLOWED_ORIGINS}})
 
 from flask import Blueprint
 
@@ -82,7 +91,6 @@ def get_public_info(uid: str) -> dict:
             f"https://m.facebook.com/profile.php?id={uid}",
             headers=IPHONE_HEADERS,
             timeout=12,
-            verify=False,
             allow_redirects=True,
         )
         if r.status_code != 200:
@@ -174,7 +182,7 @@ def get_real_profile_pic_url(uid: str) -> str | None:
         (f"https://www.facebook.com/profile.php?id={uid}", BASE_HEADERS),
     ]:
         try:
-            r = requests.get(url_template, headers=ua_headers, timeout=10, verify=False, allow_redirects=True)
+            r = requests.get(url_template, headers=ua_headers, timeout=10, allow_redirects=True)
             if r.status_code == 200:
                 soup = BeautifulSoup(r.text, 'html.parser')
                 og_image = soup.find('meta', property='og:image')
@@ -196,7 +204,7 @@ def get_followers_with_cookies(uid: str, cookies: dict) -> dict:
     if not cookies:
         return {}
     try:
-        with httpx.Client(http2=False, verify=False, timeout=15, follow_redirects=True) as client:
+        with httpx.Client(http2=False, timeout=15, follow_redirects=True) as client:
             r = client.get(
                 MBASIC_PROFILE_URL.format(uid=uid),
                 headers=BASE_HEADERS,
@@ -258,7 +266,6 @@ def check_instagram(username: str) -> bool:
             },
             timeout=6,
             allow_redirects=True,
-            verify=False,
         )
         return r.status_code == 200
     except Exception:
@@ -343,7 +350,6 @@ def proxy_pic(uid: str):
             cdn_url,
             headers={'User-Agent': FBOT_UA, 'Referer': 'https://www.facebook.com/'},
             timeout=12,
-            verify=False,
             stream=True,
         )
         if img_resp.status_code != 200:
@@ -388,27 +394,36 @@ def fb_health():
 
 @bp.route('/uid/fetch', methods=['POST'])
 def fetch_uids():
-    data = request.get_json()
+    data = request.get_json(silent=True)
     if not data or 'uids' not in data:
         return jsonify({'success': False, 'error': 'Missing uids list'}), 400
 
     uid_list = data['uids']
     if not isinstance(uid_list, list):
         return jsonify({'success': False, 'error': 'uids must be a list'}), 400
+    if not uid_list or len(uid_list) > 100:
+        return jsonify({'success': False, 'error': 'uids must contain between 1 and 100 items'}), 400
+    if any(
+        not isinstance(item, dict)
+        or not re.fullmatch(r'\d{5,20}', str(item.get('uid', '')).strip())
+        for item in uid_list
+    ):
+        return jsonify({'success': False, 'error': 'each uid must contain 5 to 20 digits'}), 400
 
     # Read cookie fresh at request time — no restart needed after env var update
     cookie_str = data.get('cookie', '') or os.environ.get("FB_DEFAULT_COOKIE", "")
     global_cookies = parse_cookies(cookie_str)
 
     def process_one(item):
+        if not isinstance(item, dict):
+            return None
         uid = str(item.get('uid', '')).strip()
-        password = item.get('password')
-        if not uid:
+        if not re.fullmatch(r'\d{5,20}', uid):
             return None
 
         extra_cookies = global_cookies or None
         result = fetch_uid_info(uid, extra_cookies)
-        return {'uid': uid, 'password': password, 'result': result}
+        return {'uid': uid, 'result': result}
 
     results = []
     max_workers = min(20, max(1, len(uid_list)))
@@ -472,6 +487,23 @@ app.register_blueprint(bp, url_prefix='/api/fb')
 @app.route('/api/admin/track', methods=['POST'])
 def track_event():
     return jsonify({'success': True}), 202
+
+
+@app.after_request
+def add_security_headers(response):
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['X-Frame-Options'] = 'DENY'
+    response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+    response.headers['Permissions-Policy'] = 'camera=(), microphone=(), geolocation=()'
+    response.headers['Content-Security-Policy'] = (
+        "default-src 'self'; img-src 'self' https: data:; "
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+        "font-src 'self' https://fonts.gstatic.com; script-src 'self'; "
+        "connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
+    )
+    if request.is_secure:
+        response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
+    return response
 
 
 @app.route('/api/health', methods=['GET'])

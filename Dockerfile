@@ -16,5 +16,8 @@ COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 COPY artifacts/api-server/fb_server.py ./fb_server.py
 COPY --from=web-build /app/artifacts/uid-web/dist/public ./static
+RUN groupadd --system app && useradd --system --gid app --home-dir /app app \
+    && chown -R app:app /app
+USER app
 EXPOSE 10000
 CMD ["sh", "-c", "gunicorn --workers 1 --threads 8 --timeout 120 --bind 0.0.0.0:${PORT} fb_server:app"]
