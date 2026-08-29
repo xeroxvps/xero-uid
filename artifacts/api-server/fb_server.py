@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, Response, stream_with_context
+from flask import Flask, request, jsonify, Response, stream_with_context, send_from_directory
 from flask_cors import CORS
 import re
 import requests
@@ -8,15 +8,14 @@ import os
 from bs4 import BeautifulSoup
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-app = Flask(__name__)
+STATIC_DIR = os.environ.get(
+    "STATIC_DIR",
+    os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "uid-web", "dist", "public"),
+)
+app = Flask(__name__, static_folder=STATIC_DIR, static_url_path="")
 CORS(app)
 
 from flask import Blueprint
-from db import init_app as init_db
-from auth import auth_bp
-from uids_api import uids_bp
-
-init_db(app)
 
 bp = Blueprint('fb', __name__)
 
@@ -467,14 +466,38 @@ def get_apps():
     return jsonify({"success": False, "error": "Not implemented in this version"}), 501
 
 
-app.register_blueprint(bp, url_prefix='/fb-api')
-app.register_blueprint(auth_bp, url_prefix='/fb-api/auth')
-app.register_blueprint(uids_bp, url_prefix='/fb-api/uids')
+app.register_blueprint(bp, url_prefix='/api/fb')
+
+
+@app.route('/api/admin/track', methods=['POST'])
+def track_event():
+    return jsonify({'success': True}), 202
+
+
+@app.route('/api/health', methods=['GET'])
+def health():
+    return jsonify({'status': 'ok'}), 200
 
 
 @app.route('/', methods=['GET'])
 def root():
-    return jsonify({"name": "Facebook Info Extractor", "version": "4.0", "status": "ok"})
+    index_path = os.path.join(STATIC_DIR, 'index.html')
+    if os.path.isfile(index_path):
+        return send_from_directory(STATIC_DIR, 'index.html')
+    return jsonify({"name": "UID Operator", "version": "4.0", "status": "ok"})
+
+
+@app.route('/<path:path>', methods=['GET'])
+def serve_frontend(path):
+    if path.startswith('api/'):
+        return jsonify({"success": False, "error": "Endpoint not found"}), 404
+    requested = os.path.join(STATIC_DIR, path)
+    if os.path.isfile(requested):
+        return send_from_directory(STATIC_DIR, path)
+    index_path = os.path.join(STATIC_DIR, 'index.html')
+    if os.path.isfile(index_path):
+        return send_from_directory(STATIC_DIR, 'index.html')
+    return jsonify({"success": False, "error": "Frontend not built"}), 404
 
 
 

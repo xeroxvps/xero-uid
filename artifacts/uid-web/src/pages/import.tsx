@@ -50,7 +50,7 @@ export default function Import() {
       if (!uid) continue;
       trackedEntries.push(password ? `${uid}|${password}` : uid);
       newEntries.push({
-        id: crypto.randomUUID(),
+        id: crypto.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`,
         uid,
         password,
         status: 'pending',
@@ -83,7 +83,7 @@ export default function Import() {
     setProgress({ current: 0, total: newEntries.length });
 
     try {
-      await batchFetch(newEntries);
+      void batchFetch(newEntries);
     } catch (err) {
       console.error(err);
       toast({
@@ -112,7 +112,7 @@ export default function Import() {
         <div>
           <p className="font-semibold text-[var(--text-primary)] mb-1">Format Examples:</p>
           <p>100012345678901</p>
-          <p>100012345678901|MySecretPass123</p>
+          <p>100012345678901|optional-password</p>
         </div>
       </div>
 

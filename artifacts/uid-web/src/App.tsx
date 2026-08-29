@@ -9,7 +9,6 @@ import Home from "@/pages/home";
 import Import from "@/pages/import";
 import Saved from "@/pages/saved";
 import Settings from "@/pages/settings";
-import AdminPage from "@/pages/admin";
 import { usePreferences } from "@/hooks/use-preferences";
 
 const queryClient = new QueryClient();
@@ -65,12 +64,6 @@ function BottomNav() {
 }
 
 function Router() {
-  const [location] = useLocation();
-
-  if (location === "/admin") {
-    return <AdminPage />;
-  }
-
   return (
     <div className="app-shell flex flex-col w-full min-h-[100dvh] max-w-md mx-auto bg-background relative">
       <AppHeader />

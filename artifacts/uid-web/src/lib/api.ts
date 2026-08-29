@@ -32,7 +32,7 @@ function getSessionId(): string {
   const key = "uid-session-id";
   let id = sessionStorage.getItem(key);
   if (!id) {
-    id = crypto.randomUUID();
+    id = crypto.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
     sessionStorage.setItem(key, id);
   }
   return id;
